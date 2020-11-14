@@ -155,37 +155,23 @@ void log_event(int is_tpm20)
 
 void usage(void)
 {
-	printf("Usage: tpmevtlog <-1|-2>\n");
+	printf("Usage: tpmevtlog <evtlog-file>\n");
 }
 
 int main(int argc, char *argv[])
 {
-	int c;
-
 	if (argc <= 1) {
 		usage();
 		return 0;
 	}
 
-	for ( ; ; ) {
-		c = getopt(argc, argv, "12");
-		if (c == -1)
-			break;
-		switch ( c ) {
-		case '1':
-			printf("TPM 1.2 log event\n");
-			break;
-		case '2':
-			printf("TPM 2.0 log event\n");
-			break;
-		case 'h':
-		case '?':
-		default:
-			usage();
-		}
+	if (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
+		usage();
+		return 0;
 	}
 
-	print_evttype(EvPrebootCert);
+	printf("GOT: %s\n", argv[1]);
+	print_evttype(0x404);
 
 	return 0;
 }
