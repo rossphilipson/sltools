@@ -35,13 +35,13 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
+#include <sys/stat.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include "tpmevtlog.h"
 #include "evttypes.h"
 
-/*static int fd;
-
+/*
 static inline int tpm_log_event(uint32_t event_size, void *event)
 {
 	ssize_t ret;
@@ -153,25 +153,64 @@ void log_event(int is_tpm20)
 }
 */
 
-void usage(void)
+static void print_evtlog(uint8_t *evtlog)
+{
+	print_evttype(0x404);
+	print_evttype(0x504);
+}
+
+static void usage(void)
 {
 	printf("Usage: tpmevtlog <evtlog-file>\n");
 }
 
 int main(int argc, char *argv[])
 {
+	FILE *f;
+	struct stat s;
+	uint8_t *b;
+	size_t n;
+
 	if (argc <= 1) {
 		usage();
-		return 0;
+		return 1;
 	}
 
 	if (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
 		usage();
-		return 0;
+		return 1;
 	}
 
-	printf("GOT: %s\n", argv[1]);
-	print_evttype(0x404);
+	f = fopen(argv[1], "r");
+	if (!f) {
+		printf("Failed to open file: %s error: %d\n",
+		       argv[1], errno);
+		return 1;
+	}
+
+	if (stat(argv[1], &s)) {
+		printf("Failed to stat file: %s error: %d\n",
+		       argv[1], errno);
+		return 1;
+	}
+
+	b = malloc(s.st_size);
+	if (!b) {
+		printf("Failed to alloc buffer error: %d\n", errno);
+		return 1;
+	}
+
+	n = fread(b, 1, s.st_size, f);
+	if (n != s.st_size) {
+		printf("Failed to read file: %sd\n", argv[1]);
+		return 1;
+	}
+
+	fclose(f);
+
+	print_evtlog(b);
+
+	free(b);
 
 	return 0;
 }
