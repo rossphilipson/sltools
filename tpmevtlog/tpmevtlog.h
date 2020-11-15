@@ -69,8 +69,8 @@ struct tpm12_pcr_event {
 	uint32_t	pcr_index;
 	uint32_t	type;
 	uint8_t		digest[20];
-	uint32_t	size;
-	/* Data[] */
+	uint32_t	event_size;
+	/* EventData[] */
 } __packed;
 
 #define TPM20_EVTLOG_SIGNATURE "Spec ID Event03"
@@ -87,9 +87,12 @@ struct tpm20_spec_id_event_struct {
 	uint8_t		spec_version_major;
 	uint8_t		spec_errata;
 	uint8_t		uintn_size;
-	/* uint32_t number_algorithms */
+	uint32_t	number_algorithms;
 	/* EventAlgorithmSize[number_algorithms]; */
-	/* uint8_t vendor_info_size */
+} __packed;
+
+struct tpm20_spec_id_event_struct_tail {
+	uint8_t		vendor_info_size;
 	/* VendorInfo[vendor_info_size] */
 } __packed;
 

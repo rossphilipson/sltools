@@ -41,122 +41,48 @@
 #include "tpmevtlog.h"
 #include "evttypes.h"
 
-/*
-static inline int tpm_log_event(uint32_t event_size, void *event)
+static int tpm12_print_evtlog(uint8_t *buffer, uint32_t length)
 {
-	ssize_t ret;
+	struct tpm12_event_log_header *evtlog =
+			(struct tpm12_event_log_header *)buffer;
+	struct tpm12_pcr_event *pcr_event;
 
-	ret = write(fd, event, event_size);
-	if (ret == -1) {
-		printf("Failed to write event to log\n");
-		return -1;
+	if (length < sizeof(struct tpm12_event_log_header)) {
+		printf("File too small to be a TPM 1.2 event log\n");
+		return 1;
+	}
+
+	printf("TPM 1.2 Event Log:\n");
+	printf("Signature:               %s\n", evtlog->signature);
+	printf("Container Version Major: 0x%2.2x\n", evtlog->container_ver_major);
+	printf("Container Version Minor: 0x%2.2x\n", evtlog->container_ver_minor);
+	printf("PCR Event Version Major: 0x%2.2x\n", evtlog->pcr_event_ver_major);
+	printf("PCR Event Version Minor: 0x%2.2x\n", evtlog->pcr_event_ver_minor);
+	printf("Container Size:          0x%x\n", evtlog->container_size);
+	printf("PCR Events Offset:       0x%x\n", evtlog->pcr_events_offset);
+	printf("Next Event Offset:       0x%x\n", evtlog->next_event_offset);
+
+	if ((length == sizeof(struct tpm12_event_log_header)) ||
+	    (evtlog->pcr_events_offset == evtlog->next_event_offset)) {
+		printf("TPM 1.2 event log empty of events\n");
+		return 0;
+	}
+
+	if (length < (sizeof(struct tpm12_event_log_header) +
+	    evtlog->pcr_events_offset)) {
+		printf("TPM 1.2 malformed\n");
+		return 1;
 	}
 
 	return 0;
 }
 
-static void sl_tpm12_log_event(uint32_t pcr, uint8_t *digest,
-			       const uint8_t *event_data, uint32_t event_size)
-{
-	struct tpm12_pcr_event *pcr_event;
-	uint32_t total_size;
-	uint8_t log_buf[SL_TPM12_LOG_SIZE];
-
-	memset(log_buf, 0, SL_TPM12_LOG_SIZE);
-	pcr_event = (struct tpm12_pcr_event *)log_buf;
-	pcr_event->pcr_index = pcr;
-	pcr_event->type = TXT_EVTYPE_SLAUNCH;
-	memcpy(&pcr_event->digest[0], digest, SHA1_DIGEST_SIZE);
-	pcr_event->size = event_size;
-	memcpy((uint8_t *)pcr_event + sizeof(struct tpm12_pcr_event),
-	       event_data, event_size);
-
-	total_size = sizeof(struct tpm12_pcr_event) + event_size;
-
-	if (tpm_log_event(total_size, pcr_event))
-		printf("Failed to write TPM 1.2 event\n");
-}
-
-static void sl_tpm20_log_event(uint32_t pcr, uint8_t *digest, uint16_t algo,
-			       const uint8_t *event_data, uint32_t event_size)
-{
-	struct tpm20_pcr_event_head *head;
-	struct tpm20_digest_values *dvs;
-	struct tpm20_ha *ha;
-	struct tpm20_pcr_event_tail *tail;
-	uint8_t *dptr;
-	uint32_t total_size;
-	uint8_t log_buf[SL_TPM20_LOG_SIZE];
-
-	memset(log_buf, 0, SL_TPM20_LOG_SIZE);
-	head = (struct tpm20_pcr_event_head *)log_buf;
-	head->pcr_index = pcr;
-	head->event_type = TXT_EVTYPE_SLAUNCH;
-	dvs = (struct tpm20_digest_values *)
-		((uint8_t *)head + sizeof(struct tpm20_pcr_event_head));
-	dvs->count = 1;
-	ha = (struct tpm20_ha *)
-		((uint8_t *)dvs + sizeof(struct tpm20_digest_values));
-	ha->algorithm_id = algo;
-	dptr = (uint8_t *)ha + sizeof(struct tpm20_ha);
-
-	switch (algo) {
-	case TPM_HASH_ALG_SHA512:
-		memcpy(dptr, digest, SHA512_DIGEST_SIZE);
-		tail = (struct tpm20_pcr_event_tail *)
-			(dptr + SHA512_DIGEST_SIZE);
-		break;
-	case TPM_HASH_ALG_SHA256:
-		memcpy(dptr, digest, SHA256_DIGEST_SIZE);
-		tail = (struct tpm20_pcr_event_tail *)
-			(dptr + SHA256_DIGEST_SIZE);
-		break;
-	case TPM_HASH_ALG_SHA1:
-	default:
-		memcpy(dptr, digest, SHA1_DIGEST_SIZE);
-		tail = (struct tpm20_pcr_event_tail *)
-			(dptr + SHA1_DIGEST_SIZE);
-	};
-
-	tail->event_size = event_size;
-	memcpy((uint8_t *)tail + sizeof(struct tpm20_pcr_event_tail),
-	       event_data, event_size);
-
-	total_size = (uint32_t)((uint8_t *)tail - (uint8_t *)head) +
-		sizeof(struct tpm20_pcr_event_tail) + event_size;
-
-	if (tpm_log_event(total_size, &log_buf[0]))
-		printf("Failed to write TPM 2.0 event\n");
-}
-
-void log_event(int is_tpm20)
-{
-	uint8_t digest[20];
-	void *p = (void *)tpm_log_event;
-
-	memcpy(&digest[0], p, 20);
-
-	fd = open("/sys/kernel/security/slaunch/eventlog", O_WRONLY);
-	if (fd == -1) {
-		printf("Failed to open slaunch/eventlog node\n");
-		return;
-	}
-
-	if (is_tpm20)
-		sl_tpm20_log_event(23, &digest[0], TPM_HASH_ALG_SHA1,
-				   "Test event 20", strlen("Test event 20"));
-	else
-		sl_tpm12_log_event(23, &digest[0],
-				   "Test event 12", strlen("Test event 12"));
-
-	close(fd);
-}
-*/
-
-static void print_evtlog(uint8_t *evtlog)
+static int tpm20_print_evtlog(uint8_t *buffer, uint32_t length)
 {
 	print_evttype(0x404);
 	print_evttype(0x504);
+
+	return 0;
 }
 
 static void usage(void)
@@ -170,6 +96,7 @@ int main(int argc, char *argv[])
 	struct stat s;
 	uint8_t *b;
 	size_t n;
+	int r = 0;
 
 	if (argc <= 1) {
 		usage();
@@ -208,9 +135,19 @@ int main(int argc, char *argv[])
 
 	fclose(f);
 
-	print_evtlog(b);
+	if (n < (sizeof(struct tpm12_pcr_event) + 20)) {
+		printf("File too small to be a TPM event log\n");
+		r = 1;
+		goto out;
+	}
 
+	if (!strcmp((const char *)b, TPM12_EVTLOG_SIGNATURE))
+		r = tpm12_print_evtlog(b, n);
+	else
+		r = tpm20_print_evtlog(b, n);
+
+out:
 	free(b);
 
-	return 0;
+	return r;
 }
