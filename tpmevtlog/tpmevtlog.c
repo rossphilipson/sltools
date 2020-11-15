@@ -41,11 +41,48 @@
 #include "tpmevtlog.h"
 #include "evttypes.h"
 
+static void print_hex(uint8_t *data, uint32_t size)
+{
+	uint32_t i;
+
+	for (i = 0; i < size; i++)
+		printf("%2.2x", data[i]);
+
+	printf("\n");
+}
+
+static void print_hash(uint8_t *hash, uint16_t algo_id)
+{
+	int i, n;
+
+	switch (algo_id) {
+	case TPM_HASH_ALG_SHA1:
+		n = SHA1_DIGEST_SIZE;
+		break;
+	case TPM_HASH_ALG_SHA256:
+		n = SHA256_DIGEST_SIZE;
+		break;
+	case TPM_HASH_ALG_SHA512:
+		n = SHA512_DIGEST_SIZE;
+		break;
+	default:
+		printf("Unkown algorithm ID: 0x%4.4x\n", algo_id);
+		return;
+	};
+
+	for (i = 0; i < n; i++)
+		printf("%2.2x", hash[i]);
+
+	printf("\n");
+}
+
 static int tpm12_print_evtlog(uint8_t *buffer, uint32_t length)
 {
 	struct tpm12_event_log_header *evtlog =
 			(struct tpm12_event_log_header *)buffer;
 	struct tpm12_pcr_event *pcr_event;
+	uint8_t *raw;
+	uint32_t counter;
 
 	if (length < sizeof(struct tpm12_event_log_header)) {
 		printf("File too small to be a TPM 1.2 event log\n");
@@ -68,10 +105,34 @@ static int tpm12_print_evtlog(uint8_t *buffer, uint32_t length)
 		return 0;
 	}
 
-	if (length < (sizeof(struct tpm12_event_log_header) +
-	    evtlog->pcr_events_offset)) {
+	if (length < evtlog->pcr_events_offset) {
 		printf("TPM 1.2 malformed\n");
 		return 1;
+	}
+
+	pcr_event = (struct tpm12_pcr_event *)(buffer +
+			evtlog->pcr_events_offset);
+	counter = evtlog->pcr_events_offset;
+
+	while (counter < evtlog->next_event_offset) {
+		raw = (uint8_t *)pcr_event;
+
+		printf("\n---PCR Event---\n");
+		printf("PCR Index:  %d\n", (int)pcr_event->pcr_index);
+		print_evttype(pcr_event->type);
+		print_hash(&pcr_event->digest[0], TPM_HASH_ALG_SHA1);
+		printf("Event Size: 0x%x\n", pcr_event->event_size);
+		if (pcr_event->event_size > 0)
+			print_hex(raw + sizeof(struct tpm12_pcr_event),
+				  pcr_event->event_size);
+		else
+			printf("No Event Data\n");
+
+		counter += sizeof(struct tpm12_pcr_event) +
+			pcr_event->event_size;
+		pcr_event = (struct tpm12_pcr_event *)(raw +
+			sizeof(struct tpm12_pcr_event) +
+			pcr_event->event_size);
 	}
 
 	return 0;
